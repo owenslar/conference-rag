@@ -84,6 +84,9 @@ const ragBtn = document.getElementById('rag-btn');
 const ragResults = document.getElementById('rag-results');
 const ragStatus = document.getElementById('rag-status');
 
+const talkInput = document.getElementById('talk-input');
+const talkBtn = document.getElementById('talk-btn');
+
 // ============================================
 // SETUP BANNER DETECTION
 // ============================================
@@ -353,7 +356,19 @@ async function checkSearchReadiness() {
         // --- 1 generate-answer call (only if semantic pipeline is ready) ---
         if (!semanticReady) {
             setSearchReady('rag', false);
+            setSearchReady('talk', false);
         } else {
+            // Talk outline builder: an empty topic returns 400 without calling OpenAI,
+            // so any status other than 404 (not deployed) means the function is live.
+            try {
+                const { error: fnError } = await supabaseClient.functions.invoke('generate-talk-outline', {
+                    body: { topic: '' }
+                });
+                setSearchReady('talk', !fnError || fnError.context?.status !== 404);
+            } catch {
+                setSearchReady('talk', false);
+            }
+
             try {
                 const { data, error: fnError } = await supabaseClient.functions.invoke('generate-answer', {
                     body: { question: 'test', context_talks: [] }
@@ -368,6 +383,7 @@ async function checkSearchReadiness() {
         setSearchReady('keyword', false);
         setSearchReady('semantic', false);
         setSearchReady('rag', false);
+        setSearchReady('talk', false);
     } finally {
         readinessCheckRunning = false;
     }
@@ -580,6 +596,61 @@ async function askQuestion() {
 }
 
 // ============================================
+// TALK OUTLINE BUILDER (custom feature)
+// ============================================
+
+async function buildTalkOutline() {
+    const topic = talkInput ? talkInput.value.trim() : '';
+    if (!topic || !supabaseClient) return;
+
+    showLoading(true);
+    clearResults('talk');
+
+    try {
+        const { data, error } = await supabaseClient.functions.invoke('generate-talk-outline', {
+            body: { topic }
+        });
+
+        if (error) {
+            // On non-2xx responses supabase-js leaves the JSON body on error.context
+            let message = 'Failed to build outline';
+            try { message = (await error.context.json()).error || message; } catch { /* keep default */ }
+            throw new Error(message);
+        }
+
+        let html = `<div class="result-card rag-answer">
+            <div class="result-title">${escapeHtml(data.talk_title)}</div>
+        </div>`;
+
+        data.sections.forEach((section, i) => {
+            const quotes = section.quotes.map(q => {
+                const source = `${escapeHtml(q.speaker)}, "${escapeHtml(q.title)}"`;
+                const cite = q.url
+                    ? `<a href="${escapeHtml(q.url)}" target="_blank" class="result-title-link">${source}</a>`
+                    : source;
+                return `<blockquote class="outline-quote">
+                    “${escapeHtml(q.text)}”
+                    <footer>— ${cite} ${similarityBadge(q.similarity)}</footer>
+                </blockquote>`;
+            }).join('');
+
+            html += `<div class="result-card outline-section">
+                <div class="result-title">${i + 1}. ${escapeHtml(section.heading)}</div>
+                <div class="result-sentences">${escapeHtml(section.guidance)}</div>
+                ${quotes}
+            </div>`;
+        });
+
+        showResults('talk', html);
+
+    } catch (error) {
+        showResults('talk', `<div class="result-error">Error: ${escapeHtml(error.message)}</div>`);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ============================================
 // SHARED SEARCH UTILITIES
 // ============================================
 
@@ -750,6 +821,12 @@ if (semanticInput) semanticInput.addEventListener('keypress', (e) => {
 if (ragBtn) ragBtn.addEventListener('click', askQuestion);
 if (ragInput) ragInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') askQuestion();
+});
+
+// Talk outline builder
+if (talkBtn) talkBtn.addEventListener('click', buildTalkOutline);
+if (talkInput) talkInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') buildTalkOutline();
 });
 
 // ============================================

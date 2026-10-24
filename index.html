@@ -132,6 +132,22 @@
                     </div>
                     <div class="search-results" id="rag-results"></div>
                 </div>
+
+                <!-- Panel 4: Talk Outline Builder (custom feature) -->
+                <div class="search-panel" id="talk-panel">
+                    <div class="panel-header">
+                        <h3>📝 Talk Outline Builder</h3>
+                        <span class="status-badge not-ready" id="talk-status">🔴 Not Ready</span>
+                    </div>
+                    <p class="panel-description">Enter a topic to get a barebones talk outline, with real quotes from
+                        conference talks matched to each section. Requires the generate-talk-outline Edge Function.</p>
+                    <div class="panel-input">
+                        <input type="text" id="talk-input" placeholder="What is your talk about? (e.g. gratitude)"
+                            maxlength="300" autocomplete="off" disabled />
+                        <button id="talk-btn" class="btn-primary" disabled>Build Outline</button>
+                    </div>
+                    <div class="search-results" id="talk-results"></div>
+                </div>
             </div>
         </div>
     </div>
